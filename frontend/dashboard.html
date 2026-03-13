@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HR Mail Automation Dashboard</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+  <div class="container">
+
+    <!-- ══════════════ HEADER ══════════════ -->
+    <div class="header">
+      <div>
+        <h1>📬 HR Mail Automation</h1>
+        <p>Network Engineer · Service Desk · Desktop Support</p>
+      </div>
+      <div class="status-pill">
+        <div class="dot" id="sDot"></div>
+        <span id="sTxt">Connecting...</span>
+      </div>
+    </div>
+
+    <!-- Connection Error Banner -->
+    <div class="conn-err" id="connErr">
+      ⚠️ Server se connect nahi ho pa raha.
+      Make sure <code>python app.py</code> chal raha ho, phir page refresh karo.
+    </div>
+
+    <!-- ══════════════ TABS ══════════════ -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('dashboard', this)">📊 Dashboard</div>
+      <div class="tab" onclick="switchTab('records',   this)">📋 All Records</div>
+    </div>
+
+
+    <!-- ══════════════════════════════════════════
+              TAB 1 — DASHBOARD
+    ══════════════════════════════════════════ -->
+    <div class="tab-content active" id="tab-dashboard">
+
+      <!-- Stat Cards -->
+      <div class="stats">
+        <div class="sc total">
+          <div class="sc-label">Total Contacts</div>
+          <div class="sc-val" id="stTotal">—</div>
+          <div class="sc-sub">HR emails loaded</div>
+        </div>
+        <div class="sc sent">
+          <div class="sc-label">Total Sent</div>
+          <div class="sc-val" id="stSent">—</div>
+          <div class="sc-sub">All time</div>
+        </div>
+        <div class="sc failed">
+          <div class="sc-label">Failed</div>
+          <div class="sc-val" id="stFailed">—</div>
+          <div class="sc-sub">Could not deliver</div>
+        </div>
+        <div class="sc duplicate">
+          <div class="sc-label">Duplicates</div>
+          <div class="sc-val" id="stDuplicate">—</div>
+          <div class="sc-sub">Skipped emails</div>
+        </div>
+        <div class="sc pending">
+          <div class="sc-label">Remaining</div>
+          <div class="sc-val" id="stPending">—</div>
+          <div class="sc-sub" id="stDays">calculating...</div>
+        </div>
+        <div class="sc today">
+          <div class="sc-label">Today Sent</div>
+          <div class="sc-val" id="stToday">—</div>
+          <div class="sc-sub" id="stTodayFail">0 failed today</div>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="prog-section">
+        <div class="prog-head">
+          <span class="prog-title">Overall Campaign Progress</span>
+          <span class="prog-pct" id="progPct">0%</span>
+        </div>
+        <div class="prog-bg">
+          <div class="prog-fill" id="progBar" style="width:0%"></div>
+        </div>
+        <div class="prog-meta">
+          <span id="progLeft">—</span>
+          <span id="progEst">—</span>
+        </div>
+      </div>
+
+      <!-- Main Grid: Left + Right -->
+      <div class="main-grid">
+
+        <!-- ── LEFT: Log + Batch ── -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+
+          <!-- Live Log -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Live Activity Log</span>
+              <span class="badge" id="logBadge">0 events</span>
+            </div>
+            <div class="log-feed" id="logFeed">
+              <div class="log-entry info">
+                <span class="le-icon">💡</span>
+                <div class="le-body">
+                  <div class="le-title">Waiting for server...</div>
+                  <div class="le-msg">Make sure app.py is running</div>
+                </div>
+                <span class="le-time">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Today's Batch -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Today's Batch</span>
+              <span class="badge" id="batchBadge">0 / 50</span>
+            </div>
+            <div class="batch-list" id="batchList"></div>
+          </div>
+
+        </div>
+
+        <!-- ── RIGHT: Timer + Config + Controls ── -->
+        <div class="right">
+
+          <!-- Timer -->
+          <div class="timer-box">
+            <div>
+              <div class="timer-label">Next Email In</div>
+              <div class="timer-val" id="timerVal">--:--</div>
+            </div>
+            <div class="timer-right">
+              <div class="timer-sub" id="timerSub">Not running</div>
+              <div class="cur-email" id="curEmail"></div>
+            </div>
+          </div>
+
+          <!-- Configuration -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Configuration</span>
+              <button class="btn btn-secondary btn-sm" onclick="openSettings()">Edit</button>
+            </div>
+            <div class="cfg-body">
+              <div class="cfg-row">
+                <span class="cfg-k">Gmail</span>
+                <span class="cfg-v" id="cfgEmail">not set</span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-k">Name</span>
+                <span class="cfg-v" id="cfgName">not set</span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-k">Daily Limit</span>
+                <span class="cfg-v g" id="cfgLimit">50 / day</span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-k">Delay</span>
+                <span class="cfg-v y" id="cfgDelay">60–120 sec</span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-k">Excel File</span>
+                <span class="cfg-v g" id="cfgExcel">hr_emails.xlsx</span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-k">Resume</span>
+                <span class="cfg-v g" id="cfgResume">resume.pdf</span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-k">Last Run</span>
+                <span class="cfg-v" id="cfgLast">Never</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Campaign Controls -->
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btnStart" onclick="apiStart()">▶ Start Campaign</button>
+            <button class="btn btn-secondary" id="btnPause" onclick="apiPause()" disabled>⏸ Pause</button>
+            <button class="btn btn-secondary" id="btnStop" onclick="apiStop()" disabled>⏹ Stop</button>
+            <button class="btn btn-danger" onclick="apiReset()">↺ Reset All Progress</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ══════════════════════════════════════════
+              TAB 2 — ALL RECORDS
+    ══════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-records">
+      <div class="card">
+
+        <!-- Toolbar -->
+        <div class="rec-toolbar">
+          <input class="rec-search" id="recSearch" placeholder="Search by email, name, company..."
+            oninput="searchRecords()">
+          <button class="btn btn-secondary btn-sm" onclick="loadRecords()">🔄 Refresh</button>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Company</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recBody">
+
+              <tr>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+              </tr>
+
+              <tr>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+              </tr>
+
+              <tr>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+              </tr>
+
+              <tr>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+              </tr>
+
+              <tr>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+                <td class="skeleton"></td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination">
+          <span id="pgInfo">— records</span>
+          <div class="pg-btns">
+            <button class="pg-btn" id="pgPrev" onclick="changePage(-1)" disabled>← Prev</button>
+            <span id="pgCur" style="padding:5px 12px;color:var(--accent);font-size:11px;">1</span>
+            <button class="pg-btn" id="pgNext" onclick="changePage(1)">Next →</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /.container -->
+
+
+  <!-- ══════════════ SETTINGS MODAL ══════════════ -->
+  <div class="overlay" id="settingsModal">
+    <div class="modal">
+      <h2>⚙️ Settings</h2>
+
+      <span class="section-label">Gmail Configuration</span>
+      <div class="fg">
+        <label class="fl" for="iEmail">Gmail Address</label>
+        <input class="fi" id="iEmail" type="email" placeholder="you@gmail.com">
+      </div>
+      <div class="fg">
+        <label class="fl" for="iPass">App Password (16 chars)</label>
+        <input class="fi" id="iPass" type="password" placeholder="xxxx xxxx xxxx xxxx">
+      </div>
+
+      <hr class="divider">
+      <span class="section-label">Your Info</span>
+      <div class="fg">
+        <label class="fl" for="iName">Full Name</label>
+        <input class="fi" id="iName" placeholder="Tumhara Poora Naam">
+      </div>
+      <div class="fg">
+        <label class="fl" for="iPhone">Phone Number</label>
+        <input class="fi" id="iPhone" placeholder="+91-XXXXXXXXXX">
+      </div>
+      <div class="fg">
+        <label class="fl" for="iLinkedin">LinkedIn (optional)</label>
+        <input class="fi" id="iLinkedin" placeholder="linkedin.com/in/yourprofile">
+      </div>
+
+      <hr class="divider">
+      <span class="section-label">Files</span>
+      <div class="fg">
+        <label class="fl" for="iExcel">Excel File Name</label>
+        <input class="fi" id="iExcel" placeholder="hr_emails.xlsx">
+      </div>
+      <div class="fg">
+        <label class="fl" for="iResume">Resume File Name</label>
+        <input class="fi" id="iResume" placeholder="resume.pdf">
+      </div>
+
+      <hr class="divider">
+      <span class="section-label">Sending Settings</span>
+
+      <!-- ✅ Daily Limit — custom +/- buttons -->
+      <div class="fg">
+        <label class="fl" for="iLimit">Daily Limit</label>
+        <div class="num-wrap">
+          <input class="fi" id="iLimit" type="number" placeholder="50" min="1" max="500">
+          <div class="num-btns">
+            <button class="num-btn" onclick="changeNum('iLimit', 1)" title="Increase">+</button>
+            <button class="num-btn" onclick="changeNum('iLimit', -1)" title="Decrease">−</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ✅ Delay Min — custom +/- buttons -->
+      <div class="fg">
+        <label class="fl" for="iDelayMin">Delay Min (seconds)</label>
+        <div class="num-wrap">
+          <input class="fi" id="iDelayMin" type="number" placeholder="60" min="1" max="3600">
+          <div class="num-btns">
+            <button class="num-btn" onclick="changeNum('iDelayMin', 5)" title="Increase">+</button>
+            <button class="num-btn" onclick="changeNum('iDelayMin', -5)" title="Decrease">−</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ✅ Delay Max — custom +/- buttons -->
+      <div class="fg">
+        <label class="fl" for="iDelayMax">Delay Max (seconds)</label>
+        <div class="num-wrap">
+          <input class="fi" id="iDelayMax" type="number" placeholder="120" min="1" max="3600">
+          <div class="num-btns">
+            <button class="num-btn" onclick="changeNum('iDelayMax', 5)" title="Increase">+</button>
+            <button class="num-btn" onclick="changeNum('iDelayMax', -5)" title="Decrease">−</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Save & Load Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- JS last mein load hota hai -->
+  <script src="./dashboard.js"></script>
+
+  <!-- ✅ changeNum helper — inline since it's tiny -->
+  <script>
+    function changeNum(id, delta) {
+      const el = document.getElementById(id);
+      const val = parseInt(el.value) || parseInt(el.placeholder) || 0;
+      const min = parseInt(el.min) || 1;
+      const max = parseInt(el.max) || 9999;
+      el.value = Math.min(max, Math.max(min, val + delta));
+    }
+  </script>
+</body>
+
+</html>
