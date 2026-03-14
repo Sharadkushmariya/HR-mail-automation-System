@@ -220,7 +220,6 @@
               </tr>
             </thead>
             <tbody id="recBody">
-
               <tr>
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
@@ -228,7 +227,6 @@
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
               </tr>
-
               <tr>
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
@@ -236,7 +234,6 @@
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
               </tr>
-
               <tr>
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
@@ -244,7 +241,6 @@
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
               </tr>
-
               <tr>
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
@@ -252,7 +248,6 @@
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
               </tr>
-
               <tr>
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
@@ -260,7 +255,6 @@
                 <td class="skeleton"></td>
                 <td class="skeleton"></td>
               </tr>
-
             </tbody>
           </table>
         </div>
@@ -286,6 +280,7 @@
     <div class="modal">
       <h2>⚙️ Settings</h2>
 
+      <!-- Gmail Config -->
       <span class="section-label">Gmail Configuration</span>
       <div class="fg">
         <label class="fl" for="iEmail">Gmail Address</label>
@@ -297,6 +292,8 @@
       </div>
 
       <hr class="divider">
+
+      <!-- Your Info -->
       <span class="section-label">Your Info</span>
       <div class="fg">
         <label class="fl" for="iName">Full Name</label>
@@ -312,20 +309,56 @@
       </div>
 
       <hr class="divider">
+
+      <!-- ✅ Files — Upload Section (REPLACED manual path input) -->
       <span class="section-label">Files</span>
+
+      <!-- Excel Upload -->
       <div class="fg">
-        <label class="fl" for="iExcel">Excel File Name</label>
-        <input class="fi" id="iExcel" placeholder="hr_emails.xlsx">
+        <label class="fl">HR Contacts Excel (.xlsx)</label>
+        <div class="upload-zone" id="excelZone" onclick="document.getElementById('excelInput').click()">
+          <div class="uz-icon">📊</div>
+          <div class="uz-text" id="excelZoneText">Click to upload Excel file</div>
+          <div class="uz-sub" id="excelZoneSub">Supports .xlsx and .xls</div>
+        </div>
+        <input type="file" id="excelInput" accept=".xlsx,.xls" style="display:none"
+          onchange="handleFileSelect('excel', this)">
+        <!-- Preview after selection -->
+        <div class="upload-preview" id="excelPreview" style="display:none">
+          <span class="up-icon">📊</span>
+          <span class="up-name" id="excelPreviewName"></span>
+          <span class="up-rows" id="excelPreviewRows"></span>
+          <button class="up-remove" onclick="clearFile('excel')" title="Remove">✕</button>
+        </div>
+        <!-- Current file info from server -->
+        <div class="up-current" id="excelCurrent"></div>
       </div>
+
+      <!-- Resume Upload -->
       <div class="fg">
-        <label class="fl" for="iResume">Resume File Name</label>
-        <input class="fi" id="iResume" placeholder="resume.pdf">
+        <label class="fl">Resume / CV (.pdf)</label>
+        <div class="upload-zone" id="resumeZone" onclick="document.getElementById('resumeInput').click()">
+          <div class="uz-icon">📄</div>
+          <div class="uz-text" id="resumeZoneText">Click to upload Resume PDF</div>
+          <div class="uz-sub" id="resumeZoneSub">Only .pdf files</div>
+        </div>
+        <input type="file" id="resumeInput" accept=".pdf" style="display:none"
+          onchange="handleFileSelect('resume', this)">
+        <!-- Preview after selection -->
+        <div class="upload-preview" id="resumePreview" style="display:none">
+          <span class="up-icon">📄</span>
+          <span class="up-name" id="resumePreviewName"></span>
+          <button class="up-remove" onclick="clearFile('resume')" title="Remove">✕</button>
+        </div>
+        <!-- Current file info from server -->
+        <div class="up-current" id="resumeCurrent"></div>
       </div>
 
       <hr class="divider">
+
+      <!-- Sending Settings -->
       <span class="section-label">Sending Settings</span>
 
-      <!-- ✅ Daily Limit — custom +/- buttons -->
       <div class="fg">
         <label class="fl" for="iLimit">Daily Limit</label>
         <div class="num-wrap">
@@ -337,7 +370,6 @@
         </div>
       </div>
 
-      <!-- ✅ Delay Min — custom +/- buttons -->
       <div class="fg">
         <label class="fl" for="iDelayMin">Delay Min (seconds)</label>
         <div class="num-wrap">
@@ -349,7 +381,6 @@
         </div>
       </div>
 
-      <!-- ✅ Delay Max — custom +/- buttons -->
       <div class="fg">
         <label class="fl" for="iDelayMax">Delay Max (seconds)</label>
         <div class="num-wrap">
@@ -363,7 +394,7 @@
 
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveSettings()">Save & Load Excel</button>
+        <button class="btn btn-primary" id="btnSave" onclick="saveSettings()">💾 Save Settings</button>
       </div>
     </div>
   </div>
@@ -371,19 +402,7 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
-  <!-- JS last mein load hota hai -->
   <script src="./dashboard.js"></script>
-
-  <!-- ✅ changeNum helper — inline since it's tiny -->
-  <script>
-    function changeNum(id, delta) {
-      const el = document.getElementById(id);
-      const val = parseInt(el.value) || parseInt(el.placeholder) || 0;
-      const min = parseInt(el.min) || 1;
-      const max = parseInt(el.max) || 9999;
-      el.value = Math.min(max, Math.max(min, val + delta));
-    }
-  </script>
 </body>
 
 </html>

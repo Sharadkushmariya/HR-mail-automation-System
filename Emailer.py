@@ -140,7 +140,7 @@ def load_progress():
             return default.copy()
     return default.copy()
 
-
+print(f"DEBUG: {os.getenv('EMAIL_APP_PASSWORD')}")
 def save_progress(progress):
     """Save progress to JSON file"""
     progress["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

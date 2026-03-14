@@ -18,6 +18,10 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__, template_folder="frontend", static_folder="frontend")
 
+# ✅ Upload folder — jahan Excel aur Resume save honge
+UPLOAD_FOLDER = "Copy_Dataset"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 # ── Threading controls ─────────────────────────────────────
 stop_event  = threading.Event()
 pause_event = threading.Event()
@@ -25,11 +29,64 @@ campaign_thread = None
 
 
 # ═══════════════════════════════════════════════════════════
-#                    HELPER
+#                    HELPERS
 # ═══════════════════════════════════════════════════════════
 
+def _save_config():
+    """CONFIG ko config.json mein save karo (password exclude)."""
+    save_config = {k: v for k, v in CONFIG.items() if k != "EMAIL_APP_PASSWORD"}
+    with open("config.json", "w") as f:
+        json.dump(save_config, f, indent=2)
+
+
+# ── File Session — 24 hour expiry ─────────────────────────
+FILE_SESSION = "file_session.json"
+
+def _save_file_session(excel_name: str = "", resume_name: str = ""):
+    """File upload ke baad session timestamp save karo."""
+    import datetime
+    now = datetime.datetime.now()
+    # Aaj midnight tak valid
+    midnight = datetime.datetime.combine(now.date() + datetime.timedelta(days=1),
+                                         datetime.time.min)
+    session = {
+        "uploaded_at":  now.isoformat(),
+        "expires_at":   midnight.isoformat(),
+        "excel_name":   excel_name,
+        "resume_name":  resume_name,
+    }
+    with open(FILE_SESSION, "w") as f:
+        json.dump(session, f, indent=2)
+
+def _check_file_session() -> dict:
+    """
+    File session check karo.
+    Returns: { "valid": bool, "excel_name": str, "resume_name": str,
+                "expires_at": str, "uploaded_at": str }
+    """
+    import datetime
+    if not os.path.exists(FILE_SESSION):
+        return {"valid": False}
+    try:
+        with open(FILE_SESSION, "r") as f:
+            session = json.load(f)
+        expires_at = datetime.datetime.fromisoformat(session["expires_at"])
+        if datetime.datetime.now() >= expires_at:
+            # Expire ho gayi — file delete karo
+            os.remove(FILE_SESSION)
+            return {"valid": False}
+        return {
+            "valid":        True,
+            "excel_name":   session.get("excel_name", ""),
+            "resume_name":  session.get("resume_name", ""),
+            "expires_at":   session.get("expires_at", ""),
+            "uploaded_at":  session.get("uploaded_at", ""),
+        }
+    except Exception:
+        return {"valid": False}
+
+
 def read_status() -> dict:
-    """status.json padhkar dashboard ko deta hai."""
     if os.path.exists("status.json"):
         with open("status.json", "r", encoding="utf-8") as f:
             try:
@@ -37,8 +94,7 @@ def read_status() -> dict:
             except json.JSONDecodeError:
                 pass
 
-    # File nahi hai ya corrupt hai — progress se base banao
-    progress = load_progress()
+    progress   = load_progress()
     failed_log = progress.get("failed_log", [])
     dup_n      = sum(1 for e in failed_log if e.get("reason") == "Duplicate email")
     real_fail  = progress.get("failed_total", 0) - dup_n
@@ -57,29 +113,27 @@ def read_status() -> dict:
         "last_run":   progress.get("last_run", "Never"),
     }
 
-# ── Excel cache (30 sec) ──────────────────────────────
+
 _excel_cache: dict = {"stats": None, "ts": 0.0}
 
 def get_excel_stats() -> dict:
-    """Excel stats cache karo — har poll pe file mat padhо"""
     if time.time() - _excel_cache["ts"] < 5 and _excel_cache["stats"]:
         return _excel_cache["stats"]
     try:
         import pandas as pd
         progress  = load_progress()
         sent_set  = set(progress.get("sent", []))
-        df = pd.read_excel(CONFIG["EXCEL_FILE"])
-        df = df.dropna(subset=[CONFIG["EMAIL_COLUMN"]])
+        df        = pd.read_excel(CONFIG["EXCEL_FILE"])
+        df        = df.dropna(subset=[CONFIG["EMAIL_COLUMN"]])
         df_unique = df.drop_duplicates(subset=[CONFIG["EMAIL_COLUMN"]])
         total     = len(df)
         valid     = set(df_unique[CONFIG["EMAIL_COLUMN"]].str.strip().str.lower())
         sent_n     = len(sent_set & valid)
         failed_log = progress.get("failed_log", [])
         dup_n      = sum(1 for e in failed_log if e.get("reason") == "Duplicate email")
-        failed_n   = progress.get("failed_total", 0)  # ← YEH PEHLE CHAHIYE
+        failed_n   = progress.get("failed_total", 0)
         real_fail  = failed_n - dup_n
         real_sent  = sent_n - dup_n
-
         stats = {
             "total":      total,
             "sent":       real_sent,
@@ -87,7 +141,6 @@ def get_excel_stats() -> dict:
             "duplicates": dup_n,
             "pending":    max(0, len(df_unique) - real_sent - real_fail - dup_n),
         }
-
         _excel_cache["stats"] = stats
         _excel_cache["ts"]    = time.time()
         return stats
@@ -106,16 +159,14 @@ def index():
 
 @app.route("/<path:filename>")
 def static_files(filename):
-    """style.css aur dashboard.js same folder se serve karo"""
     return send_from_directory("frontend", filename)
 
 
-# ── GET: live status for dashboard ────────────────────────
+# ── GET: live status ───────────────────────────────────────
 @app.route("/api/status")
 def api_status():
     data = read_status()
 
-    # Done hone pe cache invalidate karo
     if data.get("status") == "done":
         _excel_cache["stats"] = None
         _excel_cache["ts"]    = 0.0
@@ -125,7 +176,6 @@ def api_status():
         if stats:
             data.update(stats)
 
-    # Config bhi bhejo (for display in dashboard)
     data["config"] = {
         "email_address": CONFIG["EMAIL_ADDRESS"],
         "your_name":     CONFIG["YOUR_NAME"],
@@ -135,15 +185,18 @@ def api_status():
         "resume_file":   CONFIG["RESUME_FILE"],
         "excel_file":    CONFIG["EXCEL_FILE"],
     }
+
+    # ✅ File session status — dashboard ko batao files valid hain ya expire
+    data["file_session"] = _check_file_session()
+
     return jsonify(data)
 
+
+# ── POST: config update ────────────────────────────────────
 @app.route("/api/config", methods=["POST"])
 def api_config():
-    from flask import request
     data = request.json or {}
-    
     try:
-        # CONFIG update karo
         for key, cfg_key in [
             ("email_address",  "EMAIL_ADDRESS"),
             ("email_password", "EMAIL_APP_PASSWORD"),
@@ -157,7 +210,6 @@ def api_config():
             ("delay_max",      "DELAY_MAX"),
         ]:
             if key in data and data[key] != "":
-                # Numbers ko int mein convert karo
                 if cfg_key in ("DAILY_LIMIT", "DELAY_MIN", "DELAY_MAX"):
                     try:
                         CONFIG[cfg_key] = int(data[key])
@@ -165,21 +217,97 @@ def api_config():
                         return jsonify({"ok": False, "msg": f"{cfg_key} must be a number"})
                 else:
                     CONFIG[cfg_key] = data[key]
-        
-        # Config ko file mein save karo (permanent)
-        save_config = {k: v for k, v in CONFIG.items() 
-                      if k != "EMAIL_APP_PASSWORD"}
-        with open("config.json", "w") as f:
-             json.dump(save_config, f, indent=2)
 
-        add_status_log("info", "Config Updated", 
-    f"Limit: {CONFIG['DAILY_LIMIT']}/day | Delay: {CONFIG['DELAY_MIN']}-{CONFIG['DELAY_MAX']}s")
-
+        _save_config()
+        add_status_log("info", "Config Updated",
+            f"Limit: {CONFIG['DAILY_LIMIT']}/day | Delay: {CONFIG['DELAY_MIN']}-{CONFIG['DELAY_MAX']}s")
         return jsonify({"ok": True, "msg": "Config saved!"})
     except Exception as e:
         return jsonify({"ok": False, "msg": f"Error saving config: {str(e)}"})
 
-# ── GET: records with pagination & search ────────────────
+
+# ✅ POST: File Upload ──────────────────────────────────────
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """
+    Dashboard se Excel (.xlsx) ya Resume (.pdf) upload karo.
+    Form field names:  'excel'   ya   'resume'
+    """
+    try:
+        saved = {}
+
+        # ── Excel ─────────────────────────────────────────
+        if "excel" in request.files:
+            f = request.files["excel"]
+            if not f.filename:
+                return jsonify({"ok": False, "msg": "Koi Excel file select nahi ki"})
+            if not (f.filename or "").lower().endswith((".xlsx", ".xls")):
+                return jsonify({"ok": False, "msg": "Sirf .xlsx ya .xls file allowed hai"})
+
+            orig_name = f.filename
+            save_path = os.path.join(UPLOAD_FOLDER, "hr_contacts.xlsx")
+            f.save(save_path)
+
+            CONFIG["EXCEL_FILE"] = save_path
+            _excel_cache["stats"] = None
+            _excel_cache["ts"]    = 0.0
+            _save_config()
+
+            row_count = 0
+            try:
+                import pandas as pd
+                df = pd.read_excel(save_path)
+                df = df.dropna(subset=[CONFIG["EMAIL_COLUMN"]])
+                row_count = len(df)
+            except Exception:
+                pass
+
+            add_status_log("info", "Excel Uploaded",
+                f"{orig_name} → {row_count} contacts loaded ✅")
+            saved["excel"] = {
+                "original_name": orig_name,
+                "path":          save_path,
+                "rows":          row_count,
+            }
+
+        # ── Resume ────────────────────────────────────────
+        if "resume" in request.files:
+            f = request.files["resume"]
+            if not f.filename:
+                return jsonify({"ok": False, "msg": "Koi Resume file select nahi ki"})
+            if not (f.filename or "").lower().endswith(".pdf"):
+                return jsonify({"ok": False, "msg": "Sirf .pdf file allowed hai"})
+
+            orig_name = f.filename
+            save_path = os.path.join(UPLOAD_FOLDER, "resume.pdf")
+            f.save(save_path)
+
+            CONFIG["RESUME_FILE"] = save_path
+            _save_config()
+
+            add_status_log("info", "Resume Uploaded",
+                f"{orig_name} saved successfully ✅")
+            saved["resume"] = {
+                "original_name": orig_name,
+                "path":          save_path,
+            }
+
+        if not saved:
+            return jsonify({"ok": False, "msg": "Request mein koi file nahi mili"})
+
+        # ✅ File session save karo — 24 ghante valid (midnight tak)
+        existing = _check_file_session()
+        excel_name  = saved.get("excel",  {}).get("original_name", existing.get("excel_name",  ""))
+        resume_name = saved.get("resume", {}).get("original_name", existing.get("resume_name", ""))
+        _save_file_session(excel_name=excel_name, resume_name=resume_name)
+
+        return jsonify({"ok": True, "saved": saved})
+
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"Upload error: {str(e)}"})
+
+
+# ── GET: records ───────────────────────────────────────────
 @app.route("/api/records")
 def api_records():
     from Emailer import load_progress, CONFIG
@@ -189,80 +317,69 @@ def api_records():
     per_page = int(request.args.get("per", 50))
     search   = request.args.get("q", "").lower().strip()
 
-    # ── Duplicate remove MAT karo — sab rows rakho ──
     try:
         df = pd.read_excel(CONFIG["EXCEL_FILE"])
         df = df.dropna(subset=[CONFIG["EMAIL_COLUMN"]])
         df[CONFIG["EMAIL_COLUMN"]] = df[CONFIG["EMAIL_COLUMN"]].str.strip().str.lower()
         records = df.to_dict("records")
-    except Exception as e:
+    except Exception:
         return jsonify({"records": [], "total": 0, "page": 1, "per_page": per_page})
 
     progress   = load_progress()
     sent_set   = set(progress.get("sent", []))
     failed_set = set(progress.get("failed", []))
 
-    # ── Apply search filter first ──
     seen_emails = {}
     for r in records:
         em = r.get(CONFIG["EMAIL_COLUMN"], "")
         seen_emails[em] = seen_emails.get(em, 0) + 1
 
-    # Phir search filter lagao
     if search:
         records = [r for r in records if
                    search in str(r.get(CONFIG["EMAIL_COLUMN"], "")).lower() or
                    search in str(r.get(CONFIG["NAME_COLUMN"], "")).lower() or
                    search in str(r.get(CONFIG["COMPANY_COLUMN"], "")).lower()]
 
-    total = len(records)
-    start = (page - 1) * per_page
+    total  = len(records)
+    start  = (page - 1) * per_page
     result = []
-
-    # track first-visible duplicates so we only mark later ones as failed
-    _dup_shown = {}  # loop se pehle add karo
+    _dup_shown = {}
 
     failed_log = {
-        entry["email"]: entry["reason"] 
+        entry["email"]: entry["reason"]
         for entry in progress.get("failed_log", [])
-        }
-    
+    }
+
     for r in records[start: start + per_page]:
-        em = str(r.get(CONFIG["EMAIL_COLUMN"], "")).lower()
+        em     = str(r.get(CONFIG["EMAIL_COLUMN"], "")).lower()
         is_dup = seen_emails.get(em, 1) > 1
 
         if is_dup:
             if em not in _dup_shown:
                 _dup_shown[em] = True
-                # Pehli occurrence — normal status check
-                if em in sent_set:
-                    status = "sent"
-                elif em in failed_set:
-                    status = "failed"
-                else:
-                    status = "pending"
+                if em in sent_set:       status = "sent"
+                elif em in failed_set:   status = "failed"
+                else:                    status = "pending"
             else:
-                # Duplicate occurrence — hamesha failed
                 status = "failed"
-        elif em in sent_set:
-            status = "sent"
-        elif em in failed_set:
-            status = "failed"
-        else:
-            status = "pending"
+        elif em in sent_set:    status = "sent"
+        elif em in failed_set:  status = "failed"
+        else:                   status = "pending"
 
         result.append({
             "email":   r.get(CONFIG["EMAIL_COLUMN"], ""),
             "name":    r.get(CONFIG["NAME_COLUMN"], ""),
             "company": r.get(CONFIG["COMPANY_COLUMN"], ""),
             "status":  status,
-            "reason": "Duplicate email — skipped" if (is_dup and status == "failed")else failed_log.get(em, "Could not deliver") if status == "failed"
-            else ""})
+            "reason":  "Duplicate email — skipped" if (is_dup and status == "failed")
+                       else failed_log.get(em, "Could not deliver") if status == "failed"
+                       else ""
+        })
 
     return jsonify({"records": result, "total": total, "page": page, "per_page": per_page})
 
 
-# ── POST: start campaign ──────────────────────────────────
+# ── POST: start ────────────────────────────────────────────
 @app.route("/api/start", methods=["POST"])
 def api_start():
     global campaign_thread
@@ -270,15 +387,13 @@ def api_start():
     current = read_status().get("status", "idle")
     if current == "running":
         return jsonify({"ok": False, "msg": "Campaign already chal rahi hai"})
-    
-    # ── YEH ADD KARO — fresh start ke liye status reset ──
+
     if os.path.exists("status.json"):
         os.remove("status.json")
 
     _excel_cache["stats"] = None
     _excel_cache["ts"]    = 0.0
 
-    # Stop kisi purani run ko
     stop_event.set()
     if campaign_thread and campaign_thread.is_alive():
         campaign_thread.join(timeout=2)
@@ -291,14 +406,12 @@ def api_start():
 
     campaign_thread = threading.Thread(target=_run, daemon=True)
     campaign_thread.start()
-
-    # Turant initial status likho:
     time.sleep(0.5)
 
     return jsonify({"ok": True, "msg": "Campaign shuru ho gayi!"})
 
 
-# ── POST: pause / resume ──────────────────────────────────
+# ── POST: pause / resume ───────────────────────────────────
 @app.route("/api/pause", methods=["POST"])
 def api_pause():
     if pause_event.is_set():
@@ -309,40 +422,35 @@ def api_pause():
         return jsonify({"ok": True, "msg": "Paused"})
 
 
-# ── POST: stop ────────────────────────────────────────────
+# ── POST: stop ─────────────────────────────────────────────
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
     stop_event.set()
     pause_event.clear()
-    # Status file update karo taaki dashboard idle ho jaye
-    import time
     time.sleep(0.3)
     if os.path.exists("status.json"):
         try:
             with open("status.json", "r", encoding="utf-8") as f:
                 s = json.load(f)
-            s["status"] = "idle"
+            s["status"]  = "idle"
             s["current"] = ""
-            s["timer"] = 0
+            s["timer"]   = 0
             with open("status.json", "w", encoding="utf-8") as f:
                 json.dump(s, f)
-        except:
+        except Exception:
             pass
     return jsonify({"ok": True, "msg": "Stopped"})
 
 
-# ── POST: reset all progress ──────────────────────────────
+# ── POST: reset ────────────────────────────────────────────
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
     stop_event.set()
-
-    for f in ["email_log.json", "status.json"]:
-        if os.path.exists(f):
-            os.remove(f)
-
-    _excel_cache["stats"] = None  # ← YEH ADD KARO
-    _excel_cache["ts"]    = 0.0   # ← YEH ADD KARO
-
+    for fname in ["email_log.json", "status.json"]:
+        if os.path.exists(fname):
+            os.remove(fname)
+    _excel_cache["stats"] = None
+    _excel_cache["ts"]    = 0.0
     stop_event.clear()
     return jsonify({"ok": True, "msg": "Reset done"})
 
