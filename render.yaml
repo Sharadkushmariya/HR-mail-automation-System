@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: hr-mail-automation
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: EMAIL_ADDRESS
+        sync: false
+      - key: EMAIL_APP_PASSWORD
+        sync: false
+      - key: YOUR_NAME
+        sync: false
+      - key: YOUR_PHONE
+        sync: false
+      - key: YOUR_LINKEDIN
+        sync: false
