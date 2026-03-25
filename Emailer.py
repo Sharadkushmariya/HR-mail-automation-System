@@ -4,7 +4,7 @@
 ╚══════════════════════════════════════════════════════════════╝
 """
 
-import smtplib
+import smtplib 
 import pandas as pd
 import os
 import time
