@@ -48,7 +48,7 @@ def _save_file_session(excel_name: str = "", resume_name: str = ""):
     now = datetime.datetime.now()
     # Aaj midnight tak valid
     midnight = datetime.datetime.combine(now.date() + datetime.timedelta(days=1),
-                                         datetime.time.min)
+    datetime.time.min)
     session = {
         "uploaded_at":  now.isoformat(),
         "expires_at":   midnight.isoformat(),

@@ -76,7 +76,7 @@ def get_email_body(hr_name="", company=""):
 
 I hope you are doing well.
 
-My name is Sharad Kushmaria and I recently completed my BCA along with IT and networking training 
+My name is Sharad Kushmariya and I recently completed my BCA along with IT and networking training 
 at NIIT Foundation. I have also completed CCITN networking fundamentals training and I am 
 currently preparing for CCNA certification and actively seeking 
 opportunities in Network Support, NOC, or IT Infrastructure roles {company_line}.
