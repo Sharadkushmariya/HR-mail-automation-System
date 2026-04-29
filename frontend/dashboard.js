@@ -403,10 +403,6 @@ function openSettings() {
           }
           document.getElementById('resumePreview')
             .querySelector('.up-remove').onclick = () => clearFileSession('resume');
-          document.getElementById('excelPreviewRows').textContent = '✓ valid till midnight';
-          document.getElementById('excelPreviewRows').style.color = 'var(--green)';
-          document.getElementById('resumePreview')
-            .querySelector('.up-remove').onclick = () => clearFileSession('resume');
         }
         // Current line clear karo — zone ki jagah preview hai ab
         document.getElementById('excelCurrent').textContent = '';
@@ -738,7 +734,8 @@ function getMatchColor(score) {
 function renderResearchCard(res) {
   const catColor = getCategoryColor(res.category);
   const matchClr = getMatchColor(res.match_score || 0);
-  const techStack = (res.tech_stack || []).slice(0, 5)
+  const tsArray = Array.isArray(res.tech_stack) ? res.tech_stack : (typeof res.tech_stack === 'string' ? [res.tech_stack] : []);
+  const techStack = tsArray.slice(0, 5)
     .map(t => `<span style="font-size:11px;padding:2px 8px;border-radius:5px;
                              background:var(--bg2);border:1px solid var(--border);
                              color:var(--muted);font-family:monospace;">${t}</span>`)
