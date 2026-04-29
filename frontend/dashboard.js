@@ -699,3 +699,314 @@ function changeNum(id, delta) {
   const max = parseInt(el.max) || 9999;
   el.value = Math.min(max, Math.max(min, val + delta));
 }
+
+// ═══════════════════════════════════════════════════════════
+// RESEARCH TAB — dashboard.js ke bottom mein add karo
+// ═══════════════════════════════════════════════════════════
+
+let _researchPollTimer = null;
+let _researchResultsMap = {};   // company → result (dedupe)
+
+// ── Category badge color ────────────────────────────────────
+function getCategoryColor(category) {
+  if (!category) return { bg: "var(--bg2)", color: "var(--muted)" };
+  const c = category.toLowerCase();
+  if (c.includes("networking") || c.includes("telecom"))
+    return { bg: "#1a3a2a", color: "#4ade80" };
+  if (c.includes("software") || c.includes("saas"))
+    return { bg: "#1a2a3a", color: "#60a5fa" };
+  if (c.includes("cloud") || c.includes("security"))
+    return { bg: "#1a1a3a", color: "#a78bfa" };
+  if (c.includes("data") || c.includes("ai"))
+    return { bg: "#2a1a3a", color: "#e879f9" };
+  if (c.includes("it services"))
+    return { bg: "#1a2a20", color: "#34d399" };
+  if (c.includes("bpo") || c.includes("kpo"))
+    return { bg: "#2a2a1a", color: "#fbbf24" };
+  if (c.includes("finance") || c.includes("bfsi"))
+    return { bg: "#2a1a1a", color: "#f87171" };
+  return { bg: "var(--bg2)", color: "var(--muted)" };
+}
+
+function getMatchColor(score) {
+  if (score >= 85) return "#4ade80";
+  if (score >= 70) return "#fbbf24";
+  return "#f87171";
+}
+
+// ── Render one research result card ────────────────────────
+function renderResearchCard(res) {
+  const catColor = getCategoryColor(res.category);
+  const matchClr = getMatchColor(res.match_score || 0);
+  const techStack = (res.tech_stack || []).slice(0, 5)
+    .map(t => `<span style="font-size:11px;padding:2px 8px;border-radius:5px;
+                             background:var(--bg2);border:1px solid var(--border);
+                             color:var(--muted);font-family:monospace;">${t}</span>`)
+    .join(" ");
+
+  const statusIcon = res.ok
+    ? `<span style="color:#4ade80;font-size:13px;">✅ Ready to send</span>`
+    : `<span style="color:#f87171;font-size:13px;">⚠️ ${res.error || 'Research error'}</span>`;
+
+  const rewriteNote = res.match_attempts > 1
+    ? `<span style="font-size:11px;color:var(--muted);">(Re-written ${res.match_attempts - 1}x)</span>`
+    : "";
+
+  return `
+<div class="card research-card" style="border-left:3px solid ${catColor.color};">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+    <div>
+      <div style="font-size:15px;font-weight:600;color:var(--fg);">${res.company}</div>
+      <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:11px;padding:2px 8px;border-radius:5px;
+                     background:${catColor.bg};color:${catColor.color};font-weight:600;">
+          ${res.category || 'Unknown'}
+        </span>
+        <span style="font-size:11px;color:var(--muted);">
+          Match: <strong style="color:${matchClr};">${res.match_score || 0}/100</strong>
+          ${rewriteNote}
+        </span>
+        ${statusIcon}
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-secondary btn-sm" 
+        onclick="previewEmail('${encodeURIComponent(res.company)}', '${encodeURIComponent(res.email_subject || '')}', '${encodeURIComponent(res.email_body || '')}')">
+        👁️ Preview Email
+      </button>
+    </div>
+  </div>
+
+  <!-- Description -->
+  <p style="font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.5;">
+    ${res.description || '—'}
+  </p>
+
+  <!-- Tech Stack -->
+  ${techStack ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${techStack}</div>` : ""}
+
+  <!-- Meta -->
+  <div style="font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;">
+    <span>🕐 ${res.researched_at || '—'}</span>
+    <span>📧 Attempts: ${res.match_attempts || 1}</span>
+  </div>
+</div>`;
+}
+
+// ── Inject cards into results div ──────────────────────────
+function renderAllResearchCards() {
+  const container = document.getElementById("researchResults");
+  const empty = document.getElementById("researchEmpty");
+  const cards = Object.values(_researchResultsMap);
+
+  if (cards.length === 0) {
+    if (empty) empty.style.display = "block";
+    return;
+  }
+  if (empty) empty.style.display = "none";
+
+  // Re-render all cards
+  container.innerHTML = cards.map(renderResearchCard).join("");
+}
+
+// ── START BATCH RESEARCH ────────────────────────────────────
+function startBatchResearch() {
+  const limit = parseInt(document.getElementById("researchLimit").value) || 10;
+  const btn = document.getElementById("btnResearchStart");
+
+  btn.disabled = true;
+  btn.textContent = "🔄 Researching...";
+
+  document.getElementById("researchProgressCard").style.display = "block";
+  document.getElementById("researchBadge").textContent = "Running...";
+
+  fetch("/api/research/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ limit })
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) {
+        showToast(d.msg, "error");
+        btn.disabled = false;
+        btn.textContent = "🔬 Start Research";
+        return;
+      }
+      showToast(d.msg, "success");
+      _startResearchPoll();
+    })
+    .catch(() => {
+      showToast("Research start nahi ho payi", "error");
+      btn.disabled = false;
+      btn.textContent = "🔬 Start Research";
+    });
+}
+
+// ── POLL research status ────────────────────────────────────
+function _startResearchPoll() {
+  if (_researchPollTimer) clearInterval(_researchPollTimer);
+  _researchPollTimer = setInterval(_pollResearchStatus, 2000);
+}
+
+function _pollResearchStatus() {
+  fetch("/api/research/status")
+    .then(r => r.json())
+    .then(data => {
+      const pct = data.total > 0 ? Math.round((data.progress / data.total) * 100) : 0;
+      const badge = document.getElementById("researchBadge");
+      const pgBadge = document.getElementById("researchProgressBadge");
+      const pgBar = document.getElementById("researchProgBar");
+      const pgPct = document.getElementById("researchProgPct");
+      const pgCo = document.getElementById("researchCurrentCo");
+
+      if (pgBadge) pgBadge.textContent = `${data.progress} / ${data.total}`;
+      if (pgBar) pgBar.style.width = pct + "%";
+      if (pgPct) pgPct.textContent = pct + "%";
+      if (pgCo) pgCo.textContent = data.current || "—";
+
+      // New results merge karo
+      (data.results || []).forEach(res => {
+        _researchResultsMap[res.company] = res;
+      });
+      renderAllResearchCards();
+
+      if (!data.running) {
+        clearInterval(_researchPollTimer);
+        _researchPollTimer = null;
+
+        const btn = document.getElementById("btnResearchStart");
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "🔬 Start Research";
+        }
+        if (badge) badge.textContent = data.done ? `Done — ${data.progress} researched` : "Idle";
+        if (pgCo) pgCo.textContent = "Completed!";
+
+        if (data.error) {
+          showToast("Research error: " + data.error, "error");
+        } else if (data.done) {
+          showToast(`✅ ${data.progress} companies research ho gayi!`, "success");
+        }
+      } else {
+        if (badge) badge.textContent = `${data.progress}/${data.total} done`;
+      }
+    })
+    .catch(() => { });
+}
+
+// ── LOAD EXISTING DONE RESULTS ──────────────────────────────
+function loadResearchDone() {
+  document.getElementById("researchBadge").textContent = "Loading...";
+  fetch("/api/research/done")
+    .then(r => r.json())
+    .then(data => {
+      (data.records || []).forEach(rec => {
+        // Map to card format
+        _researchResultsMap[rec.company] = {
+          company: rec.company,
+          category: rec.category,
+          description: rec.description,
+          tech_stack: [],
+          match_score: parseInt(rec.match_score) || 0,
+          match_attempts: 1,
+          email_subject: `Application for IT Role – ${rec.company}`,
+          email_body: rec.email_body,
+          ok: true,
+          error: "",
+          researched_at: "",
+          is_tech: rec.category.toLowerCase().includes("tech"),
+        };
+      });
+      renderAllResearchCards();
+      document.getElementById("researchBadge").textContent =
+        `${data.total} loaded`;
+      showToast(`${data.total} existing results loaded`, "success");
+    })
+    .catch(() => showToast("Load failed", "error"));
+}
+
+// ── SINGLE COMPANY RESEARCH ─────────────────────────────────
+function researchSingle() {
+  const input = document.getElementById("singleCompanyInput");
+  const company = input.value.trim();
+  const btn = document.getElementById("btnSingleResearch");
+
+  if (!company) { showToast("Company name likho pehle", "error"); return; }
+
+  btn.disabled = true;
+  btn.textContent = "Researching...";
+  document.getElementById("researchBadge").textContent = `Researching ${company}...`;
+
+  fetch("/api/research/single", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ company })
+  })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.textContent = "Research ↗";
+
+      if (!data.ok) {
+        showToast(data.msg || "Research failed", "error");
+        return;
+      }
+      const res = data.result;
+      _researchResultsMap[res.company] = res;
+      renderAllResearchCards();
+      document.getElementById("researchBadge").textContent = "Done";
+      showToast(`✅ ${company} researched!`, "success");
+      input.value = "";
+    })
+    .catch(() => {
+      btn.disabled = false;
+      btn.textContent = "Research ↗";
+      showToast("Research failed", "error");
+    });
+}
+
+// ── EMAIL PREVIEW MODAL ─────────────────────────────────────
+function previewEmail(companyEncoded, subjectEncoded, bodyEncoded) {
+  const company = decodeURIComponent(companyEncoded);
+  const subject = decodeURIComponent(subjectEncoded);
+  const body = decodeURIComponent(bodyEncoded);
+
+  document.getElementById("emailPreviewCompany").textContent = company;
+  document.getElementById("emailPreviewSubject").textContent = subject;
+  document.getElementById("emailPreviewBody").value = body;
+  document.getElementById("emailPreviewModal").style.display = "flex";
+}
+
+function closeEmailPreview(event) {
+  if (!event || event.target === document.getElementById("emailPreviewModal")) {
+    document.getElementById("emailPreviewModal").style.display = "none";
+  }
+}
+
+function copyEmailPreview() {
+  const subject = document.getElementById("emailPreviewSubject").textContent;
+  const body = document.getElementById("emailPreviewBody").value;
+  const full = `Subject: ${subject}\n\n${body}`;
+  navigator.clipboard.writeText(full).then(() => showToast("Email copied!", "success"));
+}
+
+// ── On tab switch, load existing if empty ───────────────────
+const _origSwitchTab = typeof switchTab === "function" ? switchTab : null;
+// Hook into switchTab — add this check
+document.querySelectorAll(".tab").forEach(tab => {
+  if (tab.textContent.includes("Research")) {
+    tab.addEventListener("click", () => {
+      if (Object.keys(_researchResultsMap).length === 0) {
+        loadResearchDone();
+      }
+    });
+  }
+});
+
+// Single company input — Enter key
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = document.getElementById("singleCompanyInput");
+  if (inp) inp.addEventListener("keydown", e => { if (e.key === "Enter") researchSingle(); });
+}
+);

@@ -1399,3 +1399,11 @@ tbody td:nth-child(3) {
   padding-left: 2px;
   font-family: var(--fm);
 }
+
+.research-card {
+  transition: border-color 0.2s;
+}
+
+.research-card:hover {
+  border-left-width: 4px;
+}

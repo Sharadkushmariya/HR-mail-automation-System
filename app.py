@@ -456,6 +456,137 @@ def api_reset():
 
 
 # ═══════════════════════════════════════════════════════════
+# YAHAN SE COPY KARO — app.py mein add karo
+# Existing routes ke baad, if __name__ == "__main__" se PEHLE
+# ═══════════════════════════════════════════════════════════
+
+# ── Research state ─────────────────────────────────────────
+_research_status = {
+    "running":   False,
+    "current":   "",
+    "progress":  0,
+    "total":     0,
+    "results":   [],
+    "error":     "",
+    "done":      False,
+}
+_research_thread = None
+
+# ── GET: research status ───────────────────────────────────
+@app.route("/api/research/status")
+def api_research_status():
+    return jsonify(_research_status)
+
+
+# ── POST: start batch research ─────────────────────────────
+@app.route("/api/research/start", methods=["POST"])
+def api_research_start():
+    global _research_thread, _research_status
+
+    if _research_status["running"]:
+        return jsonify({"ok": False, "msg": "Research already chal rahi hai"})
+
+    data  = request.json or {}
+    limit = int(data.get("limit", 50))
+
+    # Reset state
+    _research_status.update({
+        "running":  True,
+        "current":  "",
+        "progress": 0,
+        "total":    0,
+        "results":  [],
+        "error":    "",
+        "done":     False,
+    })
+
+    def _progress_cb(i, total, company, result):
+        _research_status["progress"] = i
+        _research_status["total"]    = total
+        _research_status["current"]  = company
+        if result:
+            _research_status["results"].append({
+                "company":           result.get("company", company),
+                "category":          result.get("category_detailed", ""),
+                "is_tech":           result.get("is_tech", False),
+                "description":       result.get("description", ""),
+                "tech_stack":        result.get("tech_stack", []),
+                "match_score":       result.get("match_score", 0),
+                "match_attempts":    result.get("match_attempts", 1),
+                "email_subject":     result.get("email_subject", ""),
+                "email_body":        result.get("email_body", ""),
+                "ok":                result.get("ok", False),
+                "error":             result.get("error", ""),
+                "researched_at":     result.get("researched_at", ""),
+            })
+
+    def _run():
+        from researcher import run_batch_research
+        try:
+            run_batch_research(
+                excel_file        = CONFIG["EXCEL_FILE"],
+                company_col       = CONFIG["COMPANY_COLUMN"],
+                email_col         = CONFIG["EMAIL_COLUMN"],
+                candidate_config  = CONFIG,
+                limit             = limit,
+                progress_callback = _progress_cb,
+            )
+        except Exception as e:
+            _research_status["error"] = str(e)
+        finally:
+            _research_status["running"] = False
+            _research_status["done"]    = True
+            _research_status["current"] = ""
+
+    _research_thread = threading.Thread(target=_run, daemon=True)
+    _research_thread.start()
+
+    return jsonify({"ok": True, "msg": f"Research shuru ho gayi! {limit} companies tak"})
+
+
+# ── GET: single company research ───────────────────────────
+@app.route("/api/research/single", methods=["POST"])
+def api_research_single():
+    """Ek specific company ki research karo."""
+    data    = request.json or {}
+    company = data.get("company", "").strip()
+    if not company:
+        return jsonify({"ok": False, "msg": "Company name dena zaroori hai"})
+
+    from researcher import research_and_prepare_email
+    try:
+        result = research_and_prepare_email(company, CONFIG)
+        return jsonify({"ok": True, "result": result})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
+
+
+# ── GET: already researched companies ─────────────────────
+@app.route("/api/research/done")
+def api_research_done():
+    """Excel mein jo already research ho chuki hain unhe lo."""
+    try:
+        import pandas as pd
+        df = pd.read_excel(CONFIG["EXCEL_FILE"])
+        if "AI_Researched" not in df.columns:
+            return jsonify({"records": [], "total": 0})
+
+        done_df = df[df["AI_Researched"] == "Yes"].copy()
+        records = []
+        for _, row in done_df.iterrows():
+            records.append({
+                "company":     str(row.get(CONFIG["COMPANY_COLUMN"], "")),
+                "email":       str(row.get(CONFIG["EMAIL_COLUMN"], "")),
+                "category":    str(row.get("AI_Category", "")),
+                "description": str(row.get("AI_Description", "")),
+                "email_body":  str(row.get("AI_EmailTemplate", "")),
+                "match_score": str(row.get("AI_MatchScore", "")),
+            })
+        return jsonify({"records": records, "total": len(records)})
+    except Exception as e:
+        return jsonify({"records": [], "total": 0, "error": str(e)})
+
+# ═══════════════════════════════════════════════════════════
 #                       MAIN
 # ═══════════════════════════════════════════════════════════
 
