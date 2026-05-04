@@ -455,11 +455,6 @@ def api_reset():
     return jsonify({"ok": True, "msg": "Reset done"})
 
 
-# ═══════════════════════════════════════════════════════════
-# YAHAN SE COPY KARO — app.py mein add karo
-# Existing routes ke baad, if __name__ == "__main__" se PEHLE
-# ═══════════════════════════════════════════════════════════
-
 # ── Research state ─────────────────────────────────────────
 _research_status = {
     "running":   False,
