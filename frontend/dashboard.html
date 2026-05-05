@@ -254,72 +254,89 @@
 
 
     <!-- ══════════════════════════════════════════
-              TAB 3 — AI RESEARCH
-              ✅ tab-records ke BAHAR — alag div
+              TAB 3 — AI RESEARCH (Improved UI)
     ══════════════════════════════════════════ -->
     <div class="tab-content" id="tab-research">
 
-      <!-- Top Controls -->
-      <div class="card" style="margin-bottom:14px;">
-        <div class="card-head">
-          <span class="card-title">🔬 AI Company Research</span>
-          <span class="badge" id="researchBadge">Ready</span>
-        </div>
-        <p style="font-size:13px;color:var(--muted);margin:0 0 14px;">
-          Excel se pending companies ki research karega — description, category (Tech/Non-Tech/BPO),
-          tech stack fetch karega aur custom email template banayega. Match fail hone pe auto re-write hoga.
-        </p>
-
-        <!-- Batch Research Controls -->
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;color:var(--muted);">Companies limit:</label>
-            <input type="number" id="researchLimit" value="10" min="1" max="50" style="width:70px;padding:6px 10px;border:1px solid var(--border);
-                     border-radius:8px;background:var(--bg2);color:var(--fg);font-size:13px;">
+      <!-- ── Hero Controls Card ── -->
+      <div class="research-hero-card">
+        <div class="research-hero-left">
+          <div class="research-hero-title">
+            <span class="research-icon-pulse">🔬</span>
+            <div>
+              <div style="font-size:16px;font-weight:700;color:var(--text-bright);">AI Company Research</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Groq AI · Auto email generation · Match
+                validation</div>
+            </div>
           </div>
-          <button class="btn btn-primary" id="btnResearchStart" onclick="startBatchResearch()">
-            🔬 Start Research
-          </button>
-          <button class="btn btn-secondary btn-sm" onclick="loadResearchDone()">
-            📋 Load Existing Results
-          </button>
-        </div>
 
-        <!-- Single Company Quick Research -->
-        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
-          <p
-            style="font-size:12px;color:var(--muted);margin:0 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">
-            Quick — Single Company
-          </p>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="singleCompanyInput" placeholder="e.g. Infosys, Zomato, Jio..." style="flex:1;padding:8px 12px;border:1px solid var(--border);
-                     border-radius:8px;background:var(--bg2);color:var(--fg);font-size:13px;">
-            <button class="btn btn-secondary btn-sm" onclick="researchSingle()" id="btnSingleResearch">
-              Research ↗
+          <!-- Batch Controls -->
+          <div class="research-controls-row">
+            <div class="research-limit-wrap">
+              <span style="font-size:12px;color:var(--muted);">Batch limit</span>
+              <input type="number" id="researchLimit" value="10" min="1" max="50" class="research-limit-input">
+              <span style="font-size:11px;color:var(--muted2);">companies</span>
+            </div>
+            <button class="btn btn-primary research-start-btn" id="btnResearchStart" onclick="startBatchResearch()">
+              🔬 Start Batch Research
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="loadResearchDone()" style="white-space:nowrap;">
+              📋 Load Saved
             </button>
           </div>
         </div>
+
+        <!-- Quick Single Research -->
+        <div class="research-quick-panel">
+          <div
+            style="font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">
+            ⚡ Quick Research</div>
+          <div class="research-quick-row">
+            <input type="text" id="singleCompanyInput" placeholder="Company name..." class="research-quick-input">
+            <button class="btn btn-secondary btn-sm research-quick-btn" onclick="researchSingle()"
+              id="btnSingleResearch">
+              Go ↗
+            </button>
+          </div>
+          <div style="font-size:11px;color:var(--muted2);margin-top:6px;">Press Enter or click Go</div>
+        </div>
       </div>
 
-      <!-- Progress Bar (visible during research) -->
-      <div class="card" id="researchProgressCard" style="display:none;margin-bottom:14px;">
-        <div class="card-head">
-          <span class="card-title">Research Progress</span>
-          <span class="badge" id="researchProgressBadge">0 / 0</span>
+      <!-- ── Progress Card ── -->
+      <div class="card research-progress-card" id="researchProgressCard" style="display:none;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="research-spinner"></div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-bright);">Researching...</div>
+              <div style="font-size:11px;color:var(--muted);" id="researchCurrentCo">Starting up</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:20px;font-weight:800;color:var(--gold);" id="researchProgPct">0%</div>
+            <div style="font-size:11px;color:var(--muted);" id="researchProgressBadge">0 / 0 done</div>
+          </div>
         </div>
-        <div class="prog-bg" style="margin:10px 0;">
-          <div class="prog-fill" id="researchProgBar" style="width:0%;transition:width .4s;"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
-          <span>Currently researching: <strong id="researchCurrentCo" style="color:var(--fg);">—</strong></span>
-          <span id="researchProgPct">0%</span>
+        <div class="prog-bg">
+          <div class="prog-fill" id="researchProgBar" style="width:0%;transition:width .5s cubic-bezier(.4,0,.2,1);">
+          </div>
         </div>
       </div>
 
-      <!-- Results Grid -->
-      <div id="researchResults" style="display:flex;flex-direction:column;gap:12px;">
-        <div style="text-align:center;padding:40px;color:var(--muted);font-size:14px;" id="researchEmpty">
-          Start Research karo ya Load Existing Results karo upar se.
+      <!-- ── Status Bar ── -->
+      <div class="research-status-bar">
+        <span class="research-status-dot" id="researchStatusDot"></span>
+        <span id="researchBadge" style="font-size:12px;color:var(--muted);">Ready — enter a company name or start batch
+          research</span>
+      </div>
+
+      <!-- ── Results Grid ── -->
+      <div id="researchResults" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="research-empty-state" id="researchEmpty">
+          <div style="font-size:32px;margin-bottom:12px;">🔍</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text-bright);margin-bottom:6px;">No research yet</div>
+          <div style="font-size:13px;color:var(--muted);">Enter a company name above or start batch research from your
+            Excel file</div>
         </div>
       </div>
 
@@ -332,14 +349,14 @@
   <!-- ══════════════════════════════════════════
      EMAIL PREVIEW MODAL
   ══════════════════════════════════════════ -->
-  <div class="overlay" id="emailPreviewModal" style="display:none;" onclick="closeEmailPreview(event)">
+  <!-- ✅ FIX BUG 4: display:none hataya — .show class se open/close hoga CSS overlay ki tarah -->
+  <div class="overlay" id="emailPreviewModal" onclick="closeEmailPreview(event)">
     <div class="modal" style="max-width:620px;">
       <h2 style="margin:0 0 4px;">📧 Email Preview</h2>
       <p style="font-size:13px;color:var(--muted);margin:0 0 14px;" id="emailPreviewCompany"></p>
 
       <div style="margin-bottom:10px;">
-        <label
-          style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Subject</label>
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Subject</label>
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;
                 padding:8px 12px;font-size:13px;margin-top:4px;" id="emailPreviewSubject"></div>
       </div>
@@ -433,6 +450,7 @@
         <div class="upload-preview" id="resumePreview" style="display:none">
           <span class="up-icon">📄</span>
           <span class="up-name" id="resumePreviewName"></span>
+          <span class="up-rows" id="resumePreviewRows"></span>
           <button class="up-remove" onclick="clearFile('resume')" title="Remove">✕</button>
         </div>
         <!-- Current file info from server -->

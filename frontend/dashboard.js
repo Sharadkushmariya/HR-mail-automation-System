@@ -27,6 +27,8 @@ function switchTab(id, el) {
   el.classList.add('active');
   document.getElementById('tab-' + id).classList.add('active');
   if (id === 'records') loadRecords();
+  // ✅ FIX LOGIC 2: Research auto-load — yahan se handle karo, duplicate listener nahi
+  if (id === 'research' && Object.keys(_researchResultsMap).length === 0) loadResearchDone();
 }
 
 
@@ -48,7 +50,8 @@ async function pollStatus() {
 
 function startPolling() {
   pollStatus();
-  setInterval(pollStatus, 800);
+  // ✅ FIX Minor: 200ms/800ms bahut aggressive tha — 2000ms server-friendly
+  setInterval(pollStatus, 2000);
 }
 
 
@@ -72,7 +75,8 @@ function updateDashboard(d) {
   setText('stPending', pending.toLocaleString());
   setText('stToday', (d.today_sent || 0).toLocaleString());
   setText('stTodayFail', `${d.today_failed || 0} failed today`);
-  setText('stDays', `~${daysLeft} days to finish`);
+  // ✅ FIX UI 6: "~0 days to finish" confusing tha — proper message
+  setText('stDays', pending > 0 ? `~${daysLeft} days to finish` : (sent > 0 ? '🎉 Campaign complete!' : 'Start karo campaign'));
 
   setText('progPct', pct + '%');
   document.getElementById('progBar').style.width = pct + '%';
@@ -283,7 +287,9 @@ function renderRecords(records, total) {
 }
 
 function changePage(dir) {
-  recPage = Math.max(1, recPage + dir);
+  // ✅ FIX LOGIC 4: Max page check add kiya — overflow prevent
+  const maxPage = Math.ceil(recTotal / PER_PAGE) || 1;
+  recPage = Math.min(maxPage, Math.max(1, recPage + dir));
   loadRecords();
 }
 
@@ -301,14 +307,28 @@ function searchRecords() {
 
 async function apiStart() {
   const btnStart = document.getElementById('btnStart');
-  const isPaused = btnStart.textContent.includes('Resume');
 
-  if (isPaused) {
+  // ✅ FIX BUG 1: Text check galat tha — server se actual status check karo
+  let currentStatus = 'idle';
+  try {
+    const statusRes = await fetch('/api/status');
+    const statusData = await statusRes.json();
+    currentStatus = statusData.status || 'idle';
+  } catch (e) { /* ignore — niche handle hoga */ }
+
+  if (currentStatus === 'paused') {
     btnStart.textContent = '⏳ Resuming...';
     btnStart.disabled = true;
     btnStart.style.opacity = '0.5';
-    await fetch('/api/pause', { method: 'POST' });
-    showToast('▶ Campaign resume ho gayi!');
+    try {
+      await fetch('/api/pause', { method: 'POST' });
+      showToast('▶ Campaign resume ho gayi!');
+    } catch (e) {
+      showToast('❌ Server se connect nahi ho pa raha', 'err');
+      btnStart.textContent = '⏸ Paused';
+      btnStart.disabled = false;
+      btnStart.style.opacity = '0.5';
+    }
     return;
   }
 
@@ -316,14 +336,22 @@ async function apiStart() {
   btnStart.disabled = true;
   btnStart.style.opacity = '0.5';
 
-  const res = await fetch('/api/start', { method: 'POST' });
-  const data = await res.json();
+  // ✅ FIX BUG 2: try/catch add kiya — server offline hone pe button stuck nahi rahega
+  try {
+    const res = await fetch('/api/start', { method: 'POST' });
+    const data = await res.json();
 
-  if (data.ok) {
-    showToast('▶ Campaign shuru ho gayi!');
-    btnStart.textContent = '⏳ Sending...';
-  } else {
-    showToast('❌ ' + data.msg, 'err');
+    if (data.ok) {
+      showToast('▶ Campaign shuru ho gayi!');
+      btnStart.textContent = '⏳ Sending...';
+    } else {
+      showToast('❌ ' + data.msg, 'err');
+      btnStart.textContent = '▶ Start Campaign';
+      btnStart.disabled = false;
+      btnStart.style.opacity = '1';
+    }
+  } catch (e) {
+    showToast('❌ Server se connect nahi ho pa raha', 'err');
     btnStart.textContent = '▶ Start Campaign';
     btnStart.disabled = false;
     btnStart.style.opacity = '1';
@@ -450,12 +478,11 @@ async function saveSettings() {
   btnSave.disabled = true;
 
   try {
-    // ✅ File session check — expire hai to files zaroori hain
+    // ✅ FIX BUG 3: Session check sirf warn karo — block mat karo
+    // User config-only changes (naam, limit) bhi save kar sake bina re-upload ke
     if (!_fileSessionValid && !_pendingFiles.excel && !_pendingFiles.resume) {
-      showToast('⚠️ File session expired! Excel & Resume dobara upload karo', 'warn');
-      btnSave.textContent = '💾 Save Settings';
-      btnSave.disabled = false;
-      return;
+      showToast('⚠️ File session expired — files pehle upload karo campaign start se pehle', 'warn');
+      // Return mat karo — config save hone do
     }
 
     // ── Step 1: Upload files if pending ───────────────────
@@ -543,7 +570,9 @@ function addExpiredLog() {
     <span class="le-time">now</span>
   `;
   feed.prepend(entry);
-  setText('logBadge', parseInt(document.getElementById('logBadge').textContent) + 1 + ' events');
+  // ✅ FIX BUG 5: parseInt('NaN events') = NaN — fallback 0 add kiya
+  const currentCount = parseInt(document.getElementById('logBadge').textContent) || 0;
+  setText('logBadge', (currentCount + 1) + ' events');
 }
 
 /**
@@ -730,62 +759,72 @@ function getMatchColor(score) {
   return "#f87171";
 }
 
-// ── Render one research result card ────────────────────────
+// ── Render one research result card (Improved UI) ──────────
 function renderResearchCard(res) {
   const catColor = getCategoryColor(res.category);
-  const matchClr = getMatchColor(res.match_score || 0);
-  const tsArray = Array.isArray(res.tech_stack) ? res.tech_stack : (typeof res.tech_stack === 'string' ? [res.tech_stack] : []);
+  const score = res.match_score || 0;
+  const matchClr = getMatchColor(score);
+  const tsArray = Array.isArray(res.tech_stack) ? res.tech_stack
+    : (typeof res.tech_stack === 'string' ? [res.tech_stack] : []);
   const techStack = tsArray.slice(0, 5)
-    .map(t => `<span style="font-size:11px;padding:2px 8px;border-radius:5px;
-                             background:var(--bg2);border:1px solid var(--border);
-                             color:var(--muted);font-family:monospace;">${t}</span>`)
+    .map(t => `<span style="font-size:11px;padding:2px 9px;border-radius:4px;
+      background:var(--surface3);border:1px solid var(--border);
+      color:var(--muted);font-family:var(--fm);">${esc(t)}</span>`)
     .join(" ");
 
-  const statusIcon = res.ok
-    ? `<span style="color:#4ade80;font-size:13px;">✅ Ready to send</span>`
-    : `<span style="color:#f87171;font-size:13px;">⚠️ ${res.error || 'Research error'}</span>`;
-
   const rewriteNote = res.match_attempts > 1
-    ? `<span style="font-size:11px;color:var(--muted);">(Re-written ${res.match_attempts - 1}x)</span>`
+    ? `<span style="font-size:10px;color:var(--amber);margin-left:4px;">↻ rewritten ${res.match_attempts - 1}×</span>`
     : "";
 
+  const statusBadge = res.ok
+    ? `<span style="font-size:11px;color:var(--green);background:var(--green-dim);
+         padding:2px 8px;border-radius:100px;border:1px solid rgba(74,222,128,.3);">✓ Ready</span>`
+    : `<span style="font-size:11px;color:var(--red);background:var(--red-dim);
+         padding:2px 8px;border-radius:100px;">⚠ Error</span>`;
+
+  const matchBarWidth = score + "%";
+  const matchBarColor = score >= 85 ? "var(--green)" : score >= 70 ? "var(--amber)" : "var(--red)";
+
   return `
-<div class="card research-card" style="border-left:3px solid ${catColor.color};">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-    <div>
-      <div style="font-size:15px;font-weight:600;color:var(--fg);">${res.company}</div>
-      <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <span style="font-size:11px;padding:2px 8px;border-radius:5px;
-                     background:${catColor.bg};color:${catColor.color};font-weight:600;">
-          ${res.category || 'Unknown'}
-        </span>
-        <span style="font-size:11px;color:var(--muted);">
-          Match: <strong style="color:${matchClr};">${res.match_score || 0}/100</strong>
-          ${rewriteNote}
-        </span>
-        ${statusIcon}
+<div class="research-card" style="border-left:3px solid ${catColor.color};">
+  <!-- Header row -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:10px;">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:15px;font-weight:700;color:var(--text-bright);margin-bottom:4px;">${esc(res.company)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <span class="cat-chip" style="background:${catColor.bg};color:${catColor.color};">${esc(res.category || 'Unknown')}</span>
+        ${statusBadge}
+        ${rewriteNote}
       </div>
     </div>
-    <div style="display:flex;gap:6px;">
-      <button class="btn btn-secondary btn-sm" 
-        onclick="previewEmail('${encodeURIComponent(res.company)}', '${encodeURIComponent(res.email_subject || '')}', '${encodeURIComponent(res.email_body || '')}')">
-        👁️ Preview Email
-      </button>
-    </div>
+    <button class="btn btn-secondary btn-sm" style="flex-shrink:0;"
+      onclick="previewEmail('${encodeURIComponent(res.company)}','${encodeURIComponent(res.email_subject || '')}','${encodeURIComponent(res.email_body || '')}')">
+      👁 Email
+    </button>
   </div>
 
   <!-- Description -->
-  <p style="font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.5;">
-    ${res.description || '—'}
+  <p style="font-size:13px;color:var(--muted);margin:0 0 12px;line-height:1.55;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+    ${esc(res.description || '—')}
   </p>
 
-  <!-- Tech Stack -->
-  ${techStack ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">${techStack}</div>` : ""}
+  <!-- Tech stack -->
+  ${techStack ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;">${techStack}</div>` : ""}
 
-  <!-- Meta -->
-  <div style="font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;">
-    <span>🕐 ${res.researched_at || '—'}</span>
-    <span>📧 Attempts: ${res.match_attempts || 1}</span>
+  <!-- Match score -->
+  <div class="match-bar-wrap">
+    <span style="font-size:11px;color:var(--muted);white-space:nowrap;">Match</span>
+    <div class="match-bar-bg">
+      <div class="match-bar-fill" style="width:${matchBarWidth};background:${matchBarColor};"></div>
+    </div>
+    <span style="font-size:12px;font-weight:700;color:${matchClr};font-family:var(--fm);white-space:nowrap;">${score}/100</span>
+  </div>
+
+  <!-- Footer meta -->
+  <div style="margin-top:8px;font-size:10px;color:var(--muted2);display:flex;gap:12px;">
+    ${res.researched_at ? `<span>🕐 ${esc(res.researched_at)}</span>` : ""}
+    <span>Attempts: ${res.match_attempts || 1}</span>
   </div>
 </div>`;
 }
@@ -868,25 +907,25 @@ function _pollResearchStatus() {
       });
       renderAllResearchCards();
 
+      // ✅ Update status dot
+      const dot = document.getElementById("researchStatusDot");
+
       if (!data.running) {
         clearInterval(_researchPollTimer);
         _researchPollTimer = null;
 
         const btn = document.getElementById("btnResearchStart");
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "🔬 Start Research";
-        }
-        if (badge) badge.textContent = data.done ? `Done — ${data.progress} researched` : "Idle";
+        if (btn) { btn.disabled = false; btn.textContent = "🔬 Start Batch Research"; }
+        if (badge) badge.textContent = data.done ? `✓ ${data.progress} companies researched` : "Ready";
         if (pgCo) pgCo.textContent = "Completed!";
+        if (dot) { dot.className = data.error ? "research-status-dot error" : "research-status-dot done"; }
+        document.getElementById("researchProgressCard").style.display = "none";
 
-        if (data.error) {
-          showToast("Research error: " + data.error, "error");
-        } else if (data.done) {
-          showToast(`✅ ${data.progress} companies research ho gayi!`, "success");
-        }
+        if (data.error) showToast("Research error: " + data.error, "error");
+        else if (data.done) showToast(`✅ ${data.progress} companies research ho gayi!`, "success");
       } else {
-        if (badge) badge.textContent = `${data.progress}/${data.total} done`;
+        if (badge) badge.textContent = `Researching ${data.progress}/${data.total}...`;
+        if (dot) dot.className = "research-status-dot running";
       }
     })
     .catch(() => { });
@@ -972,12 +1011,14 @@ function previewEmail(companyEncoded, subjectEncoded, bodyEncoded) {
   document.getElementById("emailPreviewCompany").textContent = company;
   document.getElementById("emailPreviewSubject").textContent = subject;
   document.getElementById("emailPreviewBody").value = body;
-  document.getElementById("emailPreviewModal").style.display = "flex";
+  // ✅ FIX BUG 4: display:flex ki jagah .show class use karo — CSS overlay centering sahi kaam karega
+  document.getElementById("emailPreviewModal").classList.add("show");
 }
 
 function closeEmailPreview(event) {
+  // ✅ FIX BUG 4: .show class remove karo
   if (!event || event.target === document.getElementById("emailPreviewModal")) {
-    document.getElementById("emailPreviewModal").style.display = "none";
+    document.getElementById("emailPreviewModal").classList.remove("show");
   }
 }
 
@@ -988,18 +1029,7 @@ function copyEmailPreview() {
   navigator.clipboard.writeText(full).then(() => showToast("Email copied!", "success"));
 }
 
-// ── On tab switch, load existing if empty ───────────────────
-const _origSwitchTab = typeof switchTab === "function" ? switchTab : null;
-// Hook into switchTab — add this check
-document.querySelectorAll(".tab").forEach(tab => {
-  if (tab.textContent.includes("Research")) {
-    tab.addEventListener("click", () => {
-      if (Object.keys(_researchResultsMap).length === 0) {
-        loadResearchDone();
-      }
-    });
-  }
-});
+// ✅ FIX LOGIC 2: Duplicate research tab listener hataya — switchTab() mein already handle hai
 
 // Single company input — Enter key
 document.addEventListener("DOMContentLoaded", () => {

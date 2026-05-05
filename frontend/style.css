@@ -31,6 +31,11 @@
   --radius: 12px;
   --radius-sm: 8px;
   --radius-lg: 16px;
+
+  /* ✅ FIX: Missing vars used by Research tab */
+  --bg2: #1c2230;
+  --fg: #cdd5e0;
+  --accent: #60a5fa;
 }
 
 /* ── Reset ──────────────────────────────────────────── */
@@ -1400,10 +1405,257 @@ tbody td:nth-child(3) {
   font-family: var(--fm);
 }
 
+/* ✅ FIX UI 5: Duplicate .research-card definition hataya — complete definition niche hai (line ~1604) */
+
+/* ══════════════════════════════════════════════════════
+   RESEARCH TAB — Improved UI
+══════════════════════════════════════════════════════ */
+
+.research-hero-card {
+  display: flex;
+  gap: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.research-hero-left {
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.research-hero-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.research-icon-pulse {
+  font-size: 26px;
+  animation: icon-pulse 3s ease-in-out infinite;
+}
+
+@keyframes icon-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+.research-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.research-limit-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+}
+
+.research-limit-input {
+  width: 48px;
+  background: transparent;
+  border: none;
+  color: var(--gold);
+  font-family: var(--fm);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+  /* Firefox */
+  appearance: textfield;
+  /* Standard */
+}
+
+.research-limit-input::-webkit-inner-spin-button,
+.research-limit-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  /* Chrome/Safari */
+  appearance: none;
+  /* Standard */
+}
+
+.research-start-btn {
+  width: auto !important;
+  padding: 10px 20px !important;
+}
+
+.research-quick-panel {
+  width: 220px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 16px;
+  border-left: 3px solid var(--gold);
+  flex-shrink: 0;
+}
+
+.research-quick-row {
+  display: flex;
+  gap: 6px;
+}
+
+.research-quick-input {
+  flex: 1;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: var(--fg);
+  font-family: var(--fh);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .2s;
+  min-width: 0;
+}
+
+.research-quick-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-glow);
+}
+
+.research-quick-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.research-progress-card {
+  padding: 16px 20px;
+}
+
+.research-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.research-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.research-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted2);
+  flex-shrink: 0;
+  transition: background .3s, box-shadow .3s;
+}
+
+.research-status-dot.running {
+  background: var(--green);
+  box-shadow: 0 0 0 3px var(--green-dim);
+  animation: pulse-dot 1.5s infinite;
+}
+
+.research-status-dot.done {
+  background: var(--blue);
+}
+
+.research-status-dot.error {
+  background: var(--red);
+}
+
+.research-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px dashed var(--border2);
+  border-radius: var(--radius);
+}
+
+/* Research Result Cards */
 .research-card {
-  transition: border-color 0.2s;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  transition: border-color .2s, transform .15s, box-shadow .15s;
+  animation: slideDown .25s ease;
 }
 
 .research-card:hover {
   border-left-width: 4px;
+  transform: translateX(2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .25);
+}
+
+/* Category chips */
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-weight: 600;
+}
+
+/* Match score bar */
+.match-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.match-bar-bg {
+  flex: 1;
+  height: 4px;
+  background: var(--surface3);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.match-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width .6s ease;
+}
+
+@media (max-width: 700px) {
+  .research-hero-card {
+    flex-direction: column;
+  }
+
+  .research-quick-panel {
+    width: 100%;
+  }
 }

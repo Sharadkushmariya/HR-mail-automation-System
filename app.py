@@ -8,13 +8,14 @@ import time
 from Emailer import run_daily_batch, CONFIG, load_progress
 from Emailer import add_status_log
 
+# ✅ FIX LOGIC 5: os.chdir PEHLE karo — relative paths sahi directory pe resolve hongi
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 # Startup pe config.json se load karo
 if os.path.exists("config.json"):
     with open("config.json", "r") as f:
         saved = json.load(f)
         CONFIG.update(saved)
-
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__, template_folder="frontend", static_folder="frontend")
 
@@ -133,7 +134,8 @@ def get_excel_stats() -> dict:
         dup_n      = sum(1 for e in failed_log if e.get("reason") == "Duplicate email")
         failed_n   = progress.get("failed_total", 0)
         real_fail  = failed_n - dup_n
-        real_sent  = sent_n - dup_n
+        # ✅ FIX BUG 6: real_sent negative ho sakta tha — max(0, ...) add kiya
+        real_sent  = max(0, sent_n - dup_n)
         stats = {
             "total":      total,
             "sent":       real_sent,
@@ -310,8 +312,7 @@ def api_upload():
 # ── GET: records ───────────────────────────────────────────
 @app.route("/api/records")
 def api_records():
-    from Emailer import load_progress, CONFIG
-    import pandas as pd
+    # ✅ FIX: redundant local imports removed
 
     page     = int(request.args.get("page", 1))
     per_page = int(request.args.get("per", 50))
@@ -446,7 +447,7 @@ def api_stop():
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
     stop_event.set()
-    for fname in ["email_log.json", "status.json"]:
+    for fname in ["email_log.json", "status.json", "status.tmp"]:  # ✅ FIX: status.tmp cleanup
         if os.path.exists(fname):
             os.remove(fname)
     _excel_cache["stats"] = None
@@ -586,11 +587,8 @@ def api_research_done():
 # ═══════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    print("""
-╔══════════════════════════════════════════════════════════╗
-║         HR AUTOMATION — Dashboard Server                 ║
-╠══════════════════════════════════════════════════════════╣
-║   Browser: http://localhost:5000                         ║
-╚══════════════════════════════════════════════════════════╝
-    """)
+    print("=" * 60)
+    print("  HR AUTOMATION -- Dashboard Server")
+    print("  Browser: http://localhost:5000")
+    print("=" * 60)
     app.run(debug=False, port=5000, threaded=True)
