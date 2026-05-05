@@ -759,7 +759,7 @@ function getMatchColor(score) {
   return "#f87171";
 }
 
-// ── Render one research result card (Improved UI) ──────────
+// ── Render one research result card ──────────────────────────
 function renderResearchCard(res) {
   const catColor = getCategoryColor(res.category);
   const score = res.match_score || 0;
@@ -785,8 +785,11 @@ function renderResearchCard(res) {
   const matchBarWidth = score + "%";
   const matchBarColor = score >= 85 ? "var(--green)" : score >= 70 ? "var(--amber)" : "var(--red)";
 
+  // Safe company key for onclick — lookup from _researchResultsMap
+  const companyKey = encodeURIComponent(res.company);
+
   return `
-<div class="research-card" style="border-left:3px solid ${catColor.color};">
+<div class="research-card" style="border-left:3px solid ${catColor.color};" data-company="${esc(res.company)}">
   <!-- Header row -->
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:10px;">
     <div style="flex:1;min-width:0;">
@@ -797,10 +800,15 @@ function renderResearchCard(res) {
         ${rewriteNote}
       </div>
     </div>
-    <button class="btn btn-secondary btn-sm" style="flex-shrink:0;"
-      onclick="previewEmail('${encodeURIComponent(res.company)}','${encodeURIComponent(res.email_subject || '')}','${encodeURIComponent(res.email_body || '')}')">
-      👁 Email
-    </button>
+    <div style="display:flex;gap:4px;flex-shrink:0;">
+      <button class="btn btn-secondary btn-sm" onclick="previewEmailByKey('${companyKey}')">
+        👁 Email
+      </button>
+      <button class="btn btn-sm" style="background:var(--red-dim);color:var(--red);border:1px solid rgba(248,113,113,.25);padding:5px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;font-weight:700;font-family:var(--fh);"
+        onclick="deleteResearchCard('${companyKey}')" title="Delete report">
+        ✕
+      </button>
+    </div>
   </div>
 
   <!-- Description -->
@@ -849,6 +857,10 @@ function renderAllResearchCards() {
 function startBatchResearch() {
   const limit = parseInt(document.getElementById("researchLimit").value) || 10;
   const btn = document.getElementById("btnResearchStart");
+
+  // ✅ Session: New research start → old results clear karo
+  _researchResultsMap = {};
+  renderAllResearchCards();
 
   btn.disabled = true;
   btn.textContent = "🔄 Researching...";
@@ -1002,21 +1014,32 @@ function researchSingle() {
     });
 }
 
-// ── EMAIL PREVIEW MODAL ─────────────────────────────────────
-function previewEmail(companyEncoded, subjectEncoded, bodyEncoded) {
-  const company = decodeURIComponent(companyEncoded);
-  const subject = decodeURIComponent(subjectEncoded);
-  const body = decodeURIComponent(bodyEncoded);
+// ── EMAIL PREVIEW — safe lookup from _researchResultsMap ────
+function previewEmailByKey(companyKeyEncoded) {
+  const company = decodeURIComponent(companyKeyEncoded);
+  const res = _researchResultsMap[company];
+  if (!res) {
+    showToast("Report nahi mili — pehle research karo", "warn");
+    return;
+  }
+  document.getElementById("emailPreviewCompany").textContent = res.company;
+  document.getElementById("emailPreviewSubject").textContent = res.email_subject || "";
+  document.getElementById("emailPreviewBody").value = res.email_body || "";
+  document.getElementById("emailPreviewModal").classList.add("show");
+}
 
+// ── Legacy support — old onclick calls still work ───────────
+function previewEmail(companyEnc, subjectEnc, bodyEnc) {
+  const company = decodeURIComponent(companyEnc);
+  const subject = decodeURIComponent(subjectEnc);
+  const body = decodeURIComponent(bodyEnc);
   document.getElementById("emailPreviewCompany").textContent = company;
   document.getElementById("emailPreviewSubject").textContent = subject;
   document.getElementById("emailPreviewBody").value = body;
-  // ✅ FIX BUG 4: display:flex ki jagah .show class use karo — CSS overlay centering sahi kaam karega
   document.getElementById("emailPreviewModal").classList.add("show");
 }
 
 function closeEmailPreview(event) {
-  // ✅ FIX BUG 4: .show class remove karo
   if (!event || event.target === document.getElementById("emailPreviewModal")) {
     document.getElementById("emailPreviewModal").classList.remove("show");
   }
@@ -1027,6 +1050,32 @@ function copyEmailPreview() {
   const body = document.getElementById("emailPreviewBody").value;
   const full = `Subject: ${subject}\n\n${body}`;
   navigator.clipboard.writeText(full).then(() => showToast("Email copied!", "success"));
+}
+
+// ── DELETE single research card ─────────────────────────────
+function deleteResearchCard(companyKeyEncoded) {
+  const company = decodeURIComponent(companyKeyEncoded);
+  if (!_researchResultsMap[company]) return;
+  delete _researchResultsMap[company];
+  renderAllResearchCards();
+  showToast(`${company} report delete ho gayi`, "warn");
+  // Update badge count
+  const count = Object.keys(_researchResultsMap).length;
+  document.getElementById("researchBadge").textContent =
+    count > 0 ? `${count} reports` : "Ready";
+}
+
+// ── CLEAR ALL research results ──────────────────────────────
+function clearAllResearch() {
+  if (Object.keys(_researchResultsMap).length === 0) {
+    showToast("Koi report nahi hai clear karne ko", "warn");
+    return;
+  }
+  if (!confirm("Saari research reports clear karna chahte ho?")) return;
+  _researchResultsMap = {};
+  renderAllResearchCards();
+  document.getElementById("researchBadge").textContent = "Ready";
+  showToast("Saari reports clear ho gayi", "warn");
 }
 
 // ✅ FIX LOGIC 2: Duplicate research tab listener hataya — switchTab() mein already handle hai
